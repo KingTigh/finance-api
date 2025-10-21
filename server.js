@@ -1,4 +1,16 @@
 ﻿require('dotenv').config();
+const admin = require('firebase-admin');
+admin.initializeApp({ credential: admin.credential.applicationDefault() });
+
+app.post('/auth/firebase', async (req,res)=>{
+  const {idToken} = req.body;
+  try{
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const uid = decoded.uid;
+    const token = jwt.sign({uid}, process.env.JWT_SECRET, {expiresIn:'7d'});
+    res.json({token});
+  }catch(e){ res.status(401).json({error:'bad firebase token'}); }
+});
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
