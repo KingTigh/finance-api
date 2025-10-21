@@ -1,8 +1,14 @@
 ﻿require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const {MongoClient, ObjectId} = require('mongodb');
+const app = express();
+app.use(cors());
+app.use(express.json());
 const admin = require('firebase-admin');
 const serviceAccount = JSON.parse(process.env.FIREBASE_SA_JSON);
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-
 app.post('/auth/firebase', async (req,res)=>{
   const {idToken} = req.body;
   try{
@@ -12,13 +18,6 @@ app.post('/auth/firebase', async (req,res)=>{
     res.json({token});
   }catch(e){ res.status(401).json({error:'bad firebase token'}); }
 });
-const express = require('express');
-const cors = require('cors');
-const jwt = require('jsonwebtoken');
-const {MongoClient, ObjectId} = require('mongodb');
-const app = express();
-app.use(cors());
-app.use(express.json());
 const PORT = process.env.PORT || 4000;
 const uri = process.env.MONGO_URI;
 let coll;
