@@ -1,0 +1,11 @@
+:root{--bg:#f7f9fc;--card:#fff;--text:#333;--inc:#2ecc71;--exp:#e74c3c;--bal:#3498db;}
+@media (prefers-color-scheme:dark){:root{--bg:#121212;--card:#1e1e1e;--text:#eee;}}
+body[data-theme="dark"]{--bg:#121212;--card:#1e1e1e;--text:#eee;}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui;}
+header{padding:1rem;display:flex;gap:1rem;align-items:center;background:var(--bal);color:#fff;}
+button{cursor:pointer;border:none;padding:.5rem 1rem;background:var(--bal);color:#fff;border-radius:4px;}
+#summary{display:flex;gap:1rem;margin:1rem;}
+.card{flex:1;background:var(--card);padding:1rem;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.1);}
+table{width:100%;margin:1rem 0;border-collapse:collapse;background:var(--card);}
+th,td{padding:.5rem;text-align:left;border-bottom:1px solid var(--border);}
+td.amount.income{color:var(--inc);} td.amount.expense{color:var(--exp);}
