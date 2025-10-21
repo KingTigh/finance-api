@@ -1,6 +1,7 @@
 ﻿require('dotenv').config();
 const admin = require('firebase-admin');
-admin.initializeApp({ credential: admin.credential.applicationDefault() });
+const serviceAccount = JSON.parse(process.env.FIREBASE_SA_JSON);
+admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 
 app.post('/auth/firebase', async (req,res)=>{
   const {idToken} = req.body;
