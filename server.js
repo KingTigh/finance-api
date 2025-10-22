@@ -3,58 +3,104 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const {MongoClient, ObjectId} = require('mongodb');
-const app = express();
-app.use(cors());
-app.use(express.json());
 const admin = require('firebase-admin');
-const serviceAccount = JSON.parse(process.env.FIREBASE_SA_JSON);
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-app.post('/auth/firebase', async (req,res)=>{
-  const {idToken} = req.body;
-  try{
-    const decoded = await admin.auth().verifyIdToken(idToken);
-    const uid = decoded.uid;
-    const token = jwt.sign({uid}, process.env.JWT_SECRET, {expiresIn:'7d'});
-    res.json({token});
-  }catch(e){ res.status(401).json({error:'bad firebase token'}); }
-});
+
+const app = express();
+app.use(cors({origin: ['http://localhost:3000',
+                       'https://financetracker7.netlify.app'],
+              credentials: true}));
+app.use(express.json());
+
 const PORT = process.env.PORT || 4000;
 const uri = process.env.MONGO_URI;
-let coll;
+
+// ----------  FIREBASE ADMIN  ----------
+// service-account JSON must be in env var FIREBASE_SA_JSON (one-line)
+const serviceAccount = JSON.parse(process.env.FIREBASE_SA_JSON);
+admin.initializeApp({credential: admin.credential.cert(serviceAccount)});
+
+// ----------  DB ----------
+let coll, budgetColl;
 (async ()=>{
   if(uri){
     const client = new MongoClient(uri);
     await client.connect();
-    coll = client.db('finance').collection('txs');
+    const db = client.db('finance');
+    coll = db.collection('txs');
+    budgetColl = db.collection('budgets');
+    console.log('Mongo connected');
   }else{
+    // fallback JSON file (for local dev)
     const low = require('lowdb'), FileSync = require('lowdb/adapters/FileSync');
     const db = low(new FileSync('data.json'));
-    db.defaults({txs:[]}).write();
+    db.defaults({txs: [], budgets: {}}).write();
     coll = {
       find: q => ({ toArray: async () => db.get('txs').filter(q).value() }),
       insertOne: async d => { const r = db.get('txs').insert(d).write(); return {insertedId: r.id}; },
       replaceOne: async (q,d) => db.get('txs').find(q).assign(d).write(),
       deleteOne: async q => db.get('txs').remove(q).write()
     };
+    budgetColl = {
+      findOne: async () => db.get('budgets').value(),
+      replaceOne: async (q,d,opts) => db.set('budgets', d.data).write()
+    };
   }
 })();
+
+// ----------  AUTH MIDDLEWARE ----------
 function auth(req,res,next){
-  const t = (req.headers.authorization||'').split('Bearer ')[1];
+  const hdr = req.headers.authorization||'';
+  const t = hdr.split('Bearer ')[1];
   try{ req.uid = jwt.verify(t, process.env.JWT_SECRET).uid; next(); }
   catch{ res.status(401).json({error:'bad token'}); }
 }
-app.get('/api/transactions', auth, async (req,res)=> res.json(await coll.find({uid:req.uid}).toArray()));
+
+// ----------  GIS TOKEN EXCHANGE ----------
+app.post('/auth/google', async (req,res)=>{
+  const {idToken} = req.body;
+  try{
+    const ticket = await admin.auth().verifyIdToken(idToken);
+    const uid = ticket.uid;
+    const token = jwt.sign({uid}, process.env.JWT_SECRET, {expiresIn:'7d'});
+    res.json({token});
+  }catch(e){ res.status(401).json({error:'bad GIS token'}); }
+});
+
+// ----------  CRUD ----------
+app.get('/api/transactions', auth, async (req,res)=>{
+  const list = await coll.find({uid:req.uid}).sort({date:-1}).toArray();
+  res.json(list);
+});
 app.post('/api/transactions', auth, async (req,res)=>{
   const doc = {...req.body, uid:req.uid};
   const r = await coll.insertOne(doc);
-  doc._id = r.insertedId; res.json(doc);
+  doc._id = r.insertedId;
+  res.json(doc);
 });
 app.put('/api/transactions/:id', auth, async (req,res)=>{
-  await coll.replaceOne({_id: new ObjectId(req.params.id), uid:req.uid}, req.body);
+  const id = ObjectId(req.params.id);
+  await coll.replaceOne({_id:id, uid:req.uid}, req.body);
   res.json(req.body);
 });
 app.delete('/api/transactions/:id', auth, async (req,res)=>{
-  await coll.deleteOne({_id: new ObjectId(req.params.id), uid:req.uid});
+  const id = ObjectId(req.params.id);
+  await coll.deleteOne({_id:id, uid:req.uid});
   res.sendStatus(204);
 });
+
+// ----------  BUDGETS ----------
+app.get('/api/budgets', auth, async (req,res)=>{
+  const b = await budgetColl.findOne({uid:req.uid});
+  res.json(b ? b.data : {});
+});
+app.put('/api/budgets', auth, async (req,res)=>{
+  await budgetColl.replaceOne(
+    {uid:req.uid},
+    {uid:req.uid, data:req.body},
+    {upsert:true}
+  );
+  res.sendStatus(204);
+});
+
+// ----------  START ----------
 app.listen(PORT, ()=>console.log('API on',PORT));
