@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const {MongoClient, ObjectId} = require('mongodb');
-const admin = require('firebase-admin');
+const {OAuth2Client} = require('google-auth-library');   // NEW: verifies GIS tokens
 
 const app = express();
 app.use(cors({origin: ['http://localhost:3000',
@@ -13,11 +13,6 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 4000;
 const uri = process.env.MONGO_URI;
-
-// ----------  FIREBASE ADMIN  ----------
-// service-account JSON must be in env var FIREBASE_SA_JSON (one-line)
-const serviceAccount = JSON.parse(process.env.FIREBASE_SA_JSON);
-admin.initializeApp({credential: admin.credential.cert(serviceAccount)});
 
 // ----------  DB ----------
 let coll, budgetColl;
@@ -30,7 +25,7 @@ let coll, budgetColl;
     budgetColl = db.collection('budgets');
     console.log('Mongo connected');
   }else{
-    // fallback JSON file (for local dev)
+    // fallback JSON file (local dev)
     const low = require('lowdb'), FileSync = require('lowdb/adapters/FileSync');
     const db = low(new FileSync('data.json'));
     db.defaults({txs: [], budgets: {}}).write();
@@ -55,17 +50,23 @@ function auth(req,res,next){
   catch{ res.status(401).json({error:'bad token'}); }
 }
 
-// ----------  GIS TOKEN EXCHANGE ----------
+// ----------  GIS TOKEN EXCHANGE (no Firebase-admin) ----------
+const oAuth2Client = new OAuth2Client();   // empty = verify only
 app.post('/auth/google', async (req,res)=>{
   const {idToken} = req.body;
   try{
-    const ticket = await admin.auth().verifyIdToken(idToken);
-    const uid = ticket.uid;
+    const ticket = await oAuth2Client.verifyIdToken({
+      idToken,
+      audience: '281642863873-udr8ae1u1l5bie0tjvei5124dr32errf.apps.googleusercontent.com'  // your GIS Web client
+    });
+    const payload = ticket.getPayload();
+    const uid   = payload.sub;                          // Google user ID
     const token = jwt.sign({uid}, process.env.JWT_SECRET, {expiresIn:'7d'});
     res.json({token});
   }catch(e){
     console.log('GIS verify failed:', e.message);
-    res.status(401).json({error:'bad GIS token'}); }
+    res.status(401).json({error:'bad GIS token'});
+  }
 });
 
 // ----------  CRUD ----------
