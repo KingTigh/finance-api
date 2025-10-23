@@ -63,7 +63,9 @@ app.post('/auth/google', async (req,res)=>{
     const uid = ticket.uid;
     const token = jwt.sign({uid}, process.env.JWT_SECRET, {expiresIn:'7d'});
     res.json({token});
-  }catch(e){ res.status(401).json({error:'bad GIS token'}); }
+  }catch(e){
+    console.log('GIS verify failed:', e.message);
+    res.status(401).json({error:'bad GIS token'}); }
 });
 
 // ----------  CRUD ----------
