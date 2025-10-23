@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const {MongoClient, ObjectId} = require('mongodb');
-const {OAuth2Client} = require('google-auth-library');   // verifies GIS tokens
+const {OAuth2Client} = require('google-auth-library');
 
 const app = express();
 app.use(cors({origin: ['http://localhost:3000',
@@ -25,7 +25,6 @@ let coll, budgetColl;
     budgetColl = db.collection('budgets');
     console.log('Mongo connected');
   }else{
-    // fallback JSON file (local dev)
     const low = require('lowdb'), FileSync = require('lowdb/adapters/FileSync');
     const db = low(new FileSync('data.json'));
     db.defaults({txs: [], budgets: {}}).write();
@@ -50,14 +49,14 @@ function auth(req,res,next){
   catch{ res.status(401).json({error:'bad token'}); }
 }
 
-// ----------  GIS TOKEN EXCHANGE (no audience lock) ----------
-const oAuth2Client = new OAuth2Client();   // empty = accept any Google token
+// ----------  GIS TOKEN EXCHANGE ----------
+const oAuth2Client = new OAuth2Client();
 app.post('/auth/google', async (req,res)=>{
   const {idToken} = req.body;
   try{
-    const ticket = await oAuth2Client.verifyIdToken({idToken}); // ← no audience
+    const ticket = await oAuth2Client.verifyIdToken({idToken});
     const payload = ticket.getPayload();
-    const uid   = payload.sub;                          // Google user ID
+    const uid   = payload.sub;
     const token = jwt.sign({uid}, process.env.JWT_SECRET, {expiresIn:'7d'});
     res.json({token});
   }catch(e){
@@ -82,10 +81,17 @@ app.put('/api/transactions/:id', auth, async (req,res)=>{
   await coll.replaceOne({_id:id, uid:req.uid}, req.body);
   res.json(req.body);
 });
+
+//  CORS-safe DELETE (wrapped in try-catch)
 app.delete('/api/transactions/:id', auth, async (req,res)=>{
-  const id = ObjectId(req.params.id);
-  await coll.deleteOne({_id:id, uid:req.uid});
-  res.sendStatus(204);
+  try{
+    const id = ObjectId(req.params.id);
+    await coll.deleteOne({_id:id, uid:req.uid});
+    res.sendStatus(204);
+  }catch(e){
+    console.log('del error', e);
+    res.status(400).json({error:'invalid id'});
+  }
 });
 
 // ----------  BUDGETS ----------
