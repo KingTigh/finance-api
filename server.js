@@ -85,7 +85,7 @@ app.put('/api/transactions/:id', auth, async (req,res)=>{
 //  CORS-safe DELETE (wrapped in try-catch)
 app.delete('/api/transactions/:id', auth, async (req,res)=>{
   try{
-    const id = ObjectId(req.params.id);
+    const id = new ObjectId(req.params.id);
     await coll.deleteOne({_id:id, uid:req.uid});
     res.sendStatus(204);
   }catch(e){
