@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const {MongoClient, ObjectId} = require('mongodb');
-const {OAuth2Client} = require('google-auth-library');   // NEW: verifies GIS tokens
+const {OAuth2Client} = require('google-auth-library');   // verifies GIS tokens
 
 const app = express();
 app.use(cors({origin: ['http://localhost:3000',
@@ -50,15 +50,12 @@ function auth(req,res,next){
   catch{ res.status(401).json({error:'bad token'}); }
 }
 
-// ----------  GIS TOKEN EXCHANGE (no Firebase-admin) ----------
-const oAuth2Client = new OAuth2Client();   // empty = verify only
+// ----------  GIS TOKEN EXCHANGE (no audience lock) ----------
+const oAuth2Client = new OAuth2Client();   // empty = accept any Google token
 app.post('/auth/google', async (req,res)=>{
   const {idToken} = req.body;
   try{
-    const ticket = await oAuth2Client.verifyIdToken({
-      idToken,
-      audience: '281642863873-udr8ae1u1l5bie0tjvei5124dr32errf.apps.googleusercontent.com'  // your GIS Web client
-    });
+    const ticket = await oAuth2Client.verifyIdToken({idToken}); // ← no audience
     const payload = ticket.getPayload();
     const uid   = payload.sub;                          // Google user ID
     const token = jwt.sign({uid}, process.env.JWT_SECRET, {expiresIn:'7d'});
